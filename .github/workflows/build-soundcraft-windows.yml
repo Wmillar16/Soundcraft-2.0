@@ -1,0 +1,52 @@
+name: Build Soundcraft Windows EXE
+
+on:
+  workflow_dispatch:
+    inputs:
+      zip_file:
+        description: 'Name of the uploaded .zip file in the repo'
+        required: true
+        default: 'soundcraft-piano-roll-v2.zip'
+  push:
+    branches: [main]
+
+jobs:
+  build-windows-exe:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Unpack uploaded zip
+        shell: pwsh
+        run: |
+          $zipName = "${{ github.event.inputs.zip_file }}"
+          if ([string]::IsNullOrWhiteSpace($zipName)) {
+            $zipName = "soundcraft-piano-roll-v2.zip"
+          }
+          New-Item -ItemType Directory -Force -Path "extracted" | Out-Null
+          Expand-Archive -Path $zipName -DestinationPath "extracted" -Force
+          if (Test-Path "extracted\soundcraft-main") {
+            Copy-Item -Path "extracted\soundcraft-main\*" -Destination "." -Recurse -Force
+          } else {
+            Copy-Item -Path "extracted\*" -Destination "." -Recurse -Force
+          }
+          Get-ChildItem -Force
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build Windows executables
+        shell: pwsh
+        run: cargo build --workspace --release
+
+      - name: Upload Windows EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: soundcraft-windows-exe
+          path: target/release/*.exe
+          if-no-files-found: error
